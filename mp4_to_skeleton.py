@@ -9,24 +9,27 @@ from pathlib import Path
 from tqdm import tqdm
 import pickle
 
-VIDEO_PATH = Path("/media/Eason/TMU_dataset/stable_usntable/")
+os.environ['PYOPENGL_PLATFORM'] = 'egl'
+os.environ['EGL_PLATFORM'] = 'surfaceless'
+
+GPU = True
+# VIDEO_PATH = Path("/media/Eason/TMU_dataset/stable_usntable/")
+VIDEO_PATH = Path("/Users/aldo/Code/avlab/dataset/stable_unstable")
 STABLE_PATH = VIDEO_PATH / "stable"
 UNSTABLE_PATH = VIDEO_PATH / "unstable"
 VIDEOS = list(STABLE_PATH.iterdir()) + list(UNSTABLE_PATH.iterdir())
 
-os.makedirs("output")
-SKELETON_OUTPUT_PATH = "output/NEW_video_skel.pkl"
-SARCOPENIA_LABELS_OUTPUT_PATH = "output/NEW_sarcopenia_labels.txt"
-UNSTABLE_LABELS_OUTPUT_PATH = "output/NEW_unstable_labels.txt"
-PATHS_OUTPUT_PATH = "output/NEW_paths.txt"
-MEDIAPIPE_MODEL_PATH = "models/mediapipe/pose_landmarker_heavy.task"
+os.makedirs("output2")
+SKELETON_OUTPUT_PATH          = "output2/NEW_video_skel.pkl"
+SARCOPENIA_LABELS_OUTPUT_PATH = "output2/NEW_sarcopenia_labels.txt"
+UNSTABLE_LABELS_OUTPUT_PATH   = "output2/NEW_unstable_labels.txt"
+PATHS_OUTPUT_PATH             = "output2/NEW_paths.txt"
+SUBJECT_OUTPUT_PATH           = "output2/NEW_subjects.txt"
+MEDIAPIPE_MODEL_PATH          = "models/mediapipe/pose_landmarker_heavy.task"
 
 # DEBUG
 # VIDEOS = VIDEOS[:3]
 # print (VIDEOS)
-
-os.environ['PYOPENGL_PLATFORM'] = 'egl'
-os.environ['EGL_PLATFORM'] = 'surfaceless'
 
 base_timestamp = 0
 
@@ -145,7 +148,12 @@ def main():
         return
 
     print("Initializing MediaPipe Pose Landmarker...")
-    base_options = python.BaseOptions(model_asset_path=MEDIAPIPE_MODEL_PATH, delegate=python.BaseOptions.Delegate.GPU)
+
+    if GPU:
+        base_options = python.BaseOptions(model_asset_path=MEDIAPIPE_MODEL_PATH, delegate=python.BaseOptions.Delegate.GPU)
+    else:
+        base_options = python.BaseOptions(model_asset_path=MEDIAPIPE_MODEL_PATH)
+
     options = vision.PoseLandmarkerOptions(
         base_options=base_options,
         running_mode=vision.RunningMode.VIDEO,
@@ -156,14 +164,13 @@ def main():
     video_skel = []
     sarcopenia_labels = []
     unstable_labels = []
+    subjects = []
 
     for i, video_path in enumerate(tqdm(VIDEOS)):
-        basename = video_path.name
-        basename = basename.strip()
-        parts = basename.split(".mp4")[0].split("_")
-        label_stable_unstable = parts[0] # stable/unstable
-        _subject = parts[1][:-2] # there's a trailing "tg" for some reason, we trim it off here (thus the :-2)
-        label_sarcopenia_normal = parts[2] # sarcopenia/normal
+        parts = video_path.stem.split("_")
+        label_stable_unstable = int(parts[0]) # 0 = stable/1 = unstable
+        subject = int(parts[1][:-2]) # there's a trailing "tg" for some reason, we trim it off here (thus the :-2)
+        label_sarcopenia_normal = int(parts[2]) # 0 = sarcopenia/1 = normal
 
         try:
             arr = video_to_array(landmarker, video_path)
@@ -171,21 +178,26 @@ def main():
             video_skel.append(arr)
             sarcopenia_labels.append(label_sarcopenia_normal)
             unstable_labels.append(label_stable_unstable)
+            subjects.append(subject)
         except Exception as e:
             print(f"Skipping video idx={i}, Caught exception: {e}")
 
     # Save all the data
+    print(f"Saving skeleton data to {SKELETON_OUTPUT_PATH}")
     with open(SKELETON_OUTPUT_PATH, 'wb') as f:
         pickle.dump(video_skel, f)
+    print(f"Saving sarcopenia/normal data to {SARCOPENIA_LABELS_OUTPUT_PATH}")
     with open(SARCOPENIA_LABELS_OUTPUT_PATH, 'w') as f:
         f.writelines(f"{label}\n" for label in sarcopenia_labels)
+    print(f"Saving stable/unstable label data to {UNSTABLE_LABELS_OUTPUT_PATH}")
     with open(UNSTABLE_LABELS_OUTPUT_PATH, 'w') as f:
         f.writelines(f"{label}\n" for label in unstable_labels)
+    print(f"Saving paths data to {PATHS_OUTPUT_PATH}")
     with open(PATHS_OUTPUT_PATH, 'w') as f:
         f.writelines(f"{path}\n" for path in VIDEOS)
-    print(f"Saving skeleton data to {SKELETON_OUTPUT_PATH}")
-    print(f"Saving label data to {LABELS_OUTPUT_PATH}")
-    print(f"Saving paths data to {PATHS_OUTPUT_PATH}")
+    print(f"Saving subject data to {SUBJECT_OUTPUT_PATH}")
+    with open(SUBJECT_OUTPUT_PATH, 'w') as f:
+        f.writelines(f"{subject}\n" for subject in subjects)
 
 
 if __name__ == "__main__":

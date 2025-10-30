@@ -1,16 +1,18 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
-import os
-import os.path as osp
 import numpy as np
 import pickle
-import logging
-import h5py
 from sklearn.model_selection import train_test_split
 
-LABELS_PATH              = 'output/NEW_unstable_labels.txt'
-RAW_SKES_JOINTS_PKL_PATH = 'output/NEW_video_skel.pkl'
-SAVE_PATH                = 'output/NEW_stableunstable.npz'
+SET            = "train"
+LABELS_INPUT   = 'output/final/train_augmented_labels.txt'
+SKEL_PKL_INPUT = 'output/final/train_augmented_skel.pkl'
+OUTPUT         = 'output/final/train.npz'
+
+# SET            = "test"
+# LABELS_INPUT   = 'output/final/test_unstable_labels.txt'
+# SKEL_PKL_INPUT = 'output/final/test_skel.pkl'
+# OUTPUT         = 'output/final/test.npz'
 
 
 def remove_nan_frames(ske_joints, nan_logger):
@@ -110,27 +112,29 @@ def split_train_val(train_indices, method='sklearn', ratio=0.05):
 
 
 def split_dataset(skes_joints, labels):
-    sample_count = len(skes_joints)
-    split_idx = int(sample_count * 0.70)
-    indices = np.arange(sample_count)
-    np.random.shuffle(indices)
-    train_indices, test_indices = indices[:split_idx], indices[split_idx:]
-    
-    # Save labels and num_frames for each sequence of each data set
-    train_labels = labels[train_indices]
-    test_labels = labels[test_indices]
+    x = skes_joints
+    y = one_hot_vector(labels)
+    x_shape_zero = (0,) + x.shape[1:]
+    y_shape_zero = (0,) + y.shape[1:]
 
-    train_x = skes_joints[train_indices]
-    train_y = one_hot_vector(train_labels)
-    test_x = skes_joints[test_indices]
-    test_y = one_hot_vector(test_labels)
-    np.savez(SAVE_PATH, x_train=train_x, y_train=train_y, x_test=test_x, y_test=test_y)
+    if SET == "train":
+        train_x = x
+        train_y = y
+        test_x = np.zeros(x_shape_zero)
+        test_y = np.zeros(y_shape_zero)
+    else:
+        train_x = np.zeros(x_shape_zero)
+        train_y = np.zeros(y_shape_zero)
+        test_x = x
+        test_y = y
+
+    np.savez(OUTPUT, x_train=train_x, y_train=train_y, x_test=test_x, y_test=test_y)
 
 
 if __name__ == '__main__':
-    labels = np.loadtxt(LABELS_PATH, dtype=np.int32) - 1  # action label: 0~1
+    labels = np.loadtxt(LABELS_INPUT, dtype=np.int32) - 1  # action label: 0~1
 
-    with open(RAW_SKES_JOINTS_PKL_PATH, 'rb') as fr:
+    with open(SKEL_PKL_INPUT, 'rb') as fr:
         skes_joints = pickle.load(fr)  # a list
 
     skes_joints = seq_translation(skes_joints)
